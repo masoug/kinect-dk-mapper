@@ -1,7 +1,7 @@
 #include "MappingParams.hpp"
 
 
-boost::optional<MappingParameters> setup(const int argc, const char *argv[]) {
+boost::optional<MappingParameters> setup_mapping(int argc, const char **argv) {
     using namespace boost::program_options;
     using namespace boost::filesystem;
 

@@ -18,7 +18,7 @@ struct MappingParameters {
 };
 
 
-boost::optional<MappingParameters> setup(const int argc, const char *argv[]);
+boost::optional<MappingParameters> setup_mapping(int argc, const char **argv);
 
 
 #endif /* MappingParams_h */
