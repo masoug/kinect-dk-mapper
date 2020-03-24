@@ -1,6 +1,3 @@
-# ignore locally built external libs directories
-extern/
-
 # Prerequisites
 *.d
 

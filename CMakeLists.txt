@@ -11,7 +11,9 @@ find_package(libpointmatcher REQUIRED PATHS extern/libpointmatcher/_install)
 include_directories(${libpointmatcher_INCLUDE_DIRS})
 message(STATUS "libpointmatcher found, \n\tversion ${libpointmatcher_VERSION}\n\t(include=${libpointmatcher_INCLUDE_DIRS}\n\tlibs=${libpointmatcher_LIBRARIES})")
 
-add_executable(kinect_dk_mapper main.cpp)
-target_link_libraries(kinect_dk_mapper
+set(MAPPER_BIN kinect-dk-mapper)
+
+add_executable(${MAPPER_BIN} main.cpp SetupMapping.cpp)
+target_link_libraries(${MAPPER_BIN}
         ${libpointmatcher_LIBRARIES}
         ${Boost_LIBRARIES})

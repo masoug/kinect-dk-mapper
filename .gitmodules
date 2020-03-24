@@ -1,0 +1,6 @@
+[submodule "extern/libnabo"]
+	path = extern/libnabo
+	url = https://github.com/ethz-asl/libnabo.git
+[submodule "extern/libpointmatcher"]
+	path = extern/libpointmatcher
+	url = https://github.com/ethz-asl/libpointmatcher.git
