@@ -1,3 +1,8 @@
+# visual studio stuff
+azure-kinect-dk-logger/Debug
+azure-kinect-dk-logger/x64
+packages/
+
 # Prerequisites
 *.d
 
@@ -30,3 +35,9 @@
 *.exe
 *.out
 *.app
+*.ilk
+*.pdb
+.vs/azure-kinect-dk-logger/v16/.suo
+*.db
+*.opendb
+*.ipch
