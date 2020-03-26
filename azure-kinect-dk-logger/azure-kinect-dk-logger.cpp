@@ -6,129 +6,80 @@
 #include <list>
 #include <fstream>
 #include <sstream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 
 #include <boost/filesystem.hpp>
 
 #include <k4a/k4a.h>
 
-struct Point {
-    int16_t x;
-    int16_t y;
-    int16_t z;
-};
-
-
-void
-tranformation_helpers_write_point_cloud(
-    const k4a_image_t point_cloud_image,
-    const char* file_name)
-{
-    int width = k4a_image_get_width_pixels(point_cloud_image);
-    int height = k4a_image_get_height_pixels(point_cloud_image);
-
-    int16_t* point_cloud_image_data = (int16_t*)(void*)k4a_image_get_buffer(point_cloud_image);
-
-    std::vector<Point> points;
-    for (int i = 0; i < width * height; i++)
-    {
-        Point point{
-            point_cloud_image_data[3 * i + 0],
-            point_cloud_image_data[3 * i + 1],
-            point_cloud_image_data[3 * i + 2]};
-        if (point.z == 0)
-        {
-            continue;
-        }
-
-        //point.rgb[0] = color_image_data[4 * i + 0];
-        //point.rgb[1] = color_image_data[4 * i + 1];
-        //point.rgb[2] = color_image_data[4 * i + 2];
-        //uint8_t alpha = color_image_data[4 * i + 3];
-
-        //if (point.rgb[0] == 0 && point.rgb[1] == 0 && point.rgb[2] == 0 && alpha == 0)
-        //{
-        //    continue;
-        //}
-
-        points.push_back(point);
-    }
-
-#define PLY_START_HEADER "ply"
-#define PLY_END_HEADER "end_header"
-#define PLY_ASCII "format ascii 1.0"
-#define PLY_ELEMENT_VERTEX "element vertex"
-
-    // save to the ply file
-    std::ofstream ofs(file_name); // text mode first
-    ofs << PLY_START_HEADER << std::endl;
-    ofs << PLY_ASCII << std::endl;
-    ofs << PLY_ELEMENT_VERTEX << " " << points.size() << std::endl;
-    ofs << "property float x" << std::endl;
-    ofs << "property float y" << std::endl;
-    ofs << "property float z" << std::endl;
-    //ofs << "property uchar red" << std::endl;
-    //ofs << "property uchar green" << std::endl;
-    //ofs << "property uchar blue" << std::endl;
-    ofs << PLY_END_HEADER << std::endl;
-    ofs.close();
-
-    std::stringstream ss;
-    for (size_t i = 0; i < points.size(); ++i)
-    {
-        // image data is BGR
-        ss << static_cast<float>(points[i].x) * 1e-3 << " " << static_cast<float>(points[i].y) * -1e-3 << " " << static_cast<float>(points[i].z) * -1e-3;
-        //ss << " " << (float)points[i].rgb[2] << " " << (float)points[i].rgb[1] << " " << (float)points[i].rgb[0];
-        ss << std::endl;
-    }
-    std::ofstream ofs_text(file_name, std::ios::out | std::ios::app);
-    ofs_text.write(ss.str().c_str(), (std::streamsize)ss.str().length());
-}
-
-void process_captures(const k4a_transformation_t& transformation, const boost::filesystem::path& output_dir, const std::vector<k4a_capture_t>& capture_buffer)
-{
-    std::cout << std::endl << "Processing " << capture_buffer.size() << " captures..." << std::endl;
-    for (size_t i = 0; i < capture_buffer.size(); i++)
-    {
-        const auto& capture = capture_buffer[i];
-        k4a_image_t depth_image = k4a_capture_get_depth_image(capture);
-        if (depth_image != NULL) {
-            //std::cout << "Depth16 resolution: " << k4a_image_get_width_pixels(depth_image) << "x" << k4a_image_get_height_pixels(depth_image) << std::endl;
-            //std::cout << "Stride: " << k4a_image_get_stride_bytes(depth_image) << " bytes" << std::endl;
-
-            // apply transformation to convert the depth image to a point cloud
-            k4a_image_t point_cloud_image = NULL;
-            if (K4A_FAILED(k4a_image_create(K4A_IMAGE_FORMAT_CUSTOM,
-                k4a_image_get_width_pixels(depth_image),
-                k4a_image_get_height_pixels(depth_image),
-                k4a_image_get_width_pixels(depth_image) * 3 * (int)sizeof(int16_t),
-                &point_cloud_image)))
-            {
-                std::cerr << "Failed to create point cloud image" << std::endl;
-                k4a_image_release(depth_image);
-                continue;
-            }
-
-            if (K4A_FAILED(k4a_transformation_depth_image_to_point_cloud(transformation, depth_image, K4A_CALIBRATION_TYPE_DEPTH, point_cloud_image))) {
-                std::cerr << "Failed to apply depth-to-pointcloud transformation" << std::endl;
-                k4a_image_release(point_cloud_image);
-                k4a_image_release(depth_image);
-                continue;
-            }
-
-            const auto timestamp = k4a_image_get_device_timestamp_usec(depth_image);
-            std::stringstream ss;
-            ss << timestamp << ".ply";
-            tranformation_helpers_write_point_cloud(point_cloud_image, (output_dir / ss.str()).string().c_str());
-
-            k4a_image_release(point_cloud_image);
-
-            // Release the image
-            k4a_image_release(depth_image);
-        }
-
-        std::cout << "  Saved capture #" << i + 1 << std::endl;
-    }
-}
+//void
+//tranformation_helpers_write_point_cloud(
+//    const k4a_image_t point_cloud_image,
+//    const char* file_name)
+//{
+//    int width = k4a_image_get_width_pixels(point_cloud_image);
+//    int height = k4a_image_get_height_pixels(point_cloud_image);
+//
+//    int16_t* point_cloud_image_data = (int16_t*)(void*)k4a_image_get_buffer(point_cloud_image);
+//
+//    std::vector<Point> points;
+//    for (int i = 0; i < width * height; i++)
+//    {
+//        Point point{
+//            point_cloud_image_data[3 * i + 0],
+//            point_cloud_image_data[3 * i + 1],
+//            point_cloud_image_data[3 * i + 2]};
+//        if (point.z == 0)
+//        {
+//            continue;
+//        }
+//
+//        //point.rgb[0] = color_image_data[4 * i + 0];
+//        //point.rgb[1] = color_image_data[4 * i + 1];
+//        //point.rgb[2] = color_image_data[4 * i + 2];
+//        //uint8_t alpha = color_image_data[4 * i + 3];
+//
+//        //if (point.rgb[0] == 0 && point.rgb[1] == 0 && point.rgb[2] == 0 && alpha == 0)
+//        //{
+//        //    continue;
+//        //}
+//
+//        points.push_back(point);
+//    }
+//
+//#define PLY_START_HEADER "ply"
+//#define PLY_END_HEADER "end_header"
+//#define PLY_ASCII "format ascii 1.0"
+//#define PLY_ELEMENT_VERTEX "element vertex"
+//
+//    // save to the ply file
+//    std::ofstream ofs(file_name); // text mode first
+//    ofs << PLY_START_HEADER << std::endl;
+//    ofs << PLY_ASCII << std::endl;
+//    ofs << PLY_ELEMENT_VERTEX << " " << points.size() << std::endl;
+//    ofs << "property float x" << std::endl;
+//    ofs << "property float y" << std::endl;
+//    ofs << "property float z" << std::endl;
+//    //ofs << "property uchar red" << std::endl;
+//    //ofs << "property uchar green" << std::endl;
+//    //ofs << "property uchar blue" << std::endl;
+//    ofs << PLY_END_HEADER << std::endl;
+//    ofs.close();
+//
+//    std::stringstream ss;
+//    for (size_t i = 0; i < points.size(); ++i)
+//    {
+//        // image data is BGR
+//        ss << static_cast<float>(points[i].x) * 1e-3 << " " << static_cast<float>(points[i].y) * -1e-3 << " " << static_cast<float>(points[i].z) * -1e-3;
+//        //ss << " " << (float)points[i].rgb[2] << " " << (float)points[i].rgb[1] << " " << (float)points[i].rgb[0];
+//        ss << std::endl;
+//    }
+//    std::ofstream ofs_text(file_name, std::ios::out | std::ios::app);
+//    ofs_text.write(ss.str().c_str(), (std::streamsize)ss.str().length());
+//}
 
 static void create_xy_table(const k4a_calibration_t* const calibration, k4a_image_t xy_table)
 {
@@ -165,20 +116,17 @@ static void create_xy_table(const k4a_calibration_t* const calibration, k4a_imag
     }
 }
 
-static void generate_point_cloud(
+static k4a_float3_t* depth_to_pointcloud(
     const k4a_image_t depth_image,
-    const k4a_image_t xy_table,
-    k4a_image_t point_cloud,
-    int* point_count)
+    const k4a_image_t xy_table)
 {
     const int width = k4a_image_get_width_pixels(depth_image);
     const int height = k4a_image_get_height_pixels(depth_image);
 
     const uint16_t* const depth_data = (uint16_t*)(void*)k4a_image_get_buffer(depth_image);
     const k4a_float2_t* const xy_table_data = (k4a_float2_t*)(void*)k4a_image_get_buffer(xy_table);
-    k4a_float3_t* point_cloud_data = (k4a_float3_t*)(void*)k4a_image_get_buffer(point_cloud);
+    k4a_float3_t* point_cloud_data = (k4a_float3_t*)malloc(width * height * sizeof(k4a_float3_t));
 
-    *point_count = 0;
     for (int i = 0; i < width * height; i++)
     {
         if (depth_data[i] != 0 && !isnan(xy_table_data[i].xy.x) && !isnan(xy_table_data[i].xy.y))
@@ -186,7 +134,6 @@ static void generate_point_cloud(
             point_cloud_data[i].xyz.x = xy_table_data[i].xy.x * (float)depth_data[i];
             point_cloud_data[i].xyz.y = xy_table_data[i].xy.y * (float)depth_data[i];
             point_cloud_data[i].xyz.z = (float)depth_data[i];
-            (*point_count)++;
         }
         else
         {
@@ -194,6 +141,86 @@ static void generate_point_cloud(
             point_cloud_data[i].xyz.y = nanf("");
             point_cloud_data[i].xyz.z = nanf("");
         }
+    }
+
+    return point_cloud_data;
+}
+
+void point_cloud_writer_thread(
+    const boost::filesystem::path& out_dir,
+    const size_t width, const size_t height,
+    std::list<k4a_float3_t*>& point_cloud_buffer,
+    std::list<uint64_t>& timestamp_buffer,
+    std::mutex& cloud_buffer_mutex,
+    std::condition_variable& cloud_buffer_cv)
+{
+    while (true) {
+        k4a_float3_t* point_cloud = NULL;
+        uint64_t timestamp{};
+
+        auto start_pt = std::chrono::high_resolution_clock::now();
+        {
+            std::unique_lock<std::mutex> ul(cloud_buffer_mutex);
+            cloud_buffer_cv.wait(ul, [&] { return not point_cloud_buffer.empty(); });
+
+            if (point_cloud_buffer.front() == NULL) {
+                point_cloud_buffer.pop_front();
+                std::cout << "Terminating writer thread..." << std::endl;
+                return;
+            }
+
+            point_cloud = point_cloud_buffer.front();
+            timestamp = timestamp_buffer.front();
+            point_cloud_buffer.pop_front();
+            timestamp_buffer.pop_front();
+        }
+        auto pop_queue_pt = std::chrono::high_resolution_clock::now();
+
+        // first cache the output string...
+        std::ostringstream out_string;
+        size_t point_count = 0;
+        char buf[1024];
+        for (int i = 0; i < width * height; i++)
+        {
+            if (isnan(point_cloud[i].xyz.x) || isnan(point_cloud[i].xyz.y) || isnan(point_cloud[i].xyz.z))
+            {
+                continue;
+            }
+            
+            memset(buf, 0, 1024);
+            snprintf(buf, 1024, "%f %f %f\n",
+                static_cast<float>(point_cloud[i].xyz.x) * 1e-3,
+                static_cast<float>(point_cloud[i].xyz.y) * -1e-3,
+                static_cast<float>(point_cloud[i].xyz.z) * -1e-3);
+
+            out_string << buf;
+            point_count++;
+        }
+        auto cache_out_string_pt = std::chrono::high_resolution_clock::now();
+
+        std::ostringstream ss;
+        ss << timestamp << ".ply";
+        std::ofstream out_file((out_dir / ss.str()).c_str());
+        out_file << "ply" << std::endl;
+        out_file << "format ascii 1.0" << std::endl;
+        out_file << "element vertex"
+            << " " << point_count << std::endl;
+        out_file << "property float x" << std::endl;
+        out_file << "property float y" << std::endl;
+        out_file << "property float z" << std::endl;
+        out_file << "end_header" << std::endl;
+        out_file.write(out_string.str().c_str(), (std::streamsize)out_string.str().length());
+        out_file.close();
+        auto write_out_pt = std::chrono::high_resolution_clock::now();
+
+        std::cout << "writer thread profile:" << std::endl;
+        std::chrono::duration<double> elapsed;
+        elapsed = pop_queue_pt - start_pt;
+        std::cout << "  pop_queue: " << elapsed.count() << std::endl;
+        elapsed = cache_out_string_pt - pop_queue_pt;
+        std::cout << "  cache_out_string_pt: " << elapsed.count() << std::endl;
+        elapsed = write_out_pt - cache_out_string_pt;
+        std::cout << "  write_out_pt: " << elapsed.count() << std::endl;
     }
 }
 
@@ -272,12 +299,36 @@ int main(const int argc, const char* argv[])
 
     create_xy_table(&calibration, xy_table);
 
+    // setup point cloud buffer
+    std::list<k4a_float3_t*> point_cloud_buffer;
+    std::list<uint64_t> timestamp_buffer;
+    std::mutex cloud_buffer_mutex;
+    std::condition_variable cloud_buffer_cv;
+
+    std::thread cloud_writer_thread(
+        point_cloud_writer_thread,
+        std::ref(output_directory),
+        calibration.depth_camera_calibration.resolution_width,
+        calibration.depth_camera_calibration.resolution_height,
+        std::ref(point_cloud_buffer),
+        std::ref(timestamp_buffer),
+        std::ref(cloud_buffer_mutex),
+        std::ref(cloud_buffer_cv));
+
     // Capture a series of frames
     std::cout << std::endl << "Capturing frames..." << std::endl;
     for (size_t i = 0; i < num_frames; i++) {
         k4a_capture_t capture;
         if (k4a_device_get_capture(device, &capture, K4A_WAIT_INFINITE) != K4A_WAIT_RESULT_SUCCEEDED) {
             std::cerr << "Failed capture" << std::endl;
+            
+            {
+                std::lock_guard<std::mutex> lg(cloud_buffer_mutex);
+                point_cloud_buffer.push_back(NULL);
+            }
+            cloud_buffer_cv.notify_one();
+            std::cout << "Waiting for writer thread to join..." << std::endl;
+            cloud_writer_thread.join();
 
             k4a_device_stop_cameras(device);
             k4a_device_close(device);
@@ -285,39 +336,39 @@ int main(const int argc, const char* argv[])
         }
 
         auto depth_image = k4a_capture_get_depth_image(capture);
-        k4a_image_t point_cloud = NULL;
+        k4a_float3_t* cloud = depth_to_pointcloud(depth_image, xy_table);
 
-        k4a_image_create(K4A_IMAGE_FORMAT_CUSTOM,
-            calibration.depth_camera_calibration.resolution_width,
-            calibration.depth_camera_calibration.resolution_height,
-            calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float3_t),
-            &point_cloud);
+        {
+            std::lock_guard<std::mutex> lg(cloud_buffer_mutex);
+            point_cloud_buffer.push_back(cloud);
+            timestamp_buffer.push_back(k4a_image_get_device_timestamp_usec(depth_image));
+        }
+        cloud_buffer_cv.notify_one();
 
-        int point_count;
-        generate_point_cloud(depth_image, xy_table, point_cloud, &point_count);
-
-        k4a_image_release(point_cloud);
         k4a_image_release(depth_image);
         k4a_capture_release(capture);
         std::cout << "  Captured frame " << i + 1 << std::endl;
     }
     std::cout << "Capture complete" << std::endl << std::endl;
+    
+    {
+        std::lock_guard<std::mutex> lg(cloud_buffer_mutex);
+        point_cloud_buffer.push_back(NULL);
+    }
+    cloud_buffer_cv.notify_one();
+    std::cout << "Waiting for writer thread to join..." << std::endl;
+    cloud_writer_thread.join();
 
     // Shut down the camera when finished with application logic
     k4a_device_stop_cameras(device);
     k4a_device_close(device);
 
+    // free remaining resources
+    k4a_image_release(xy_table);
+
+    assert(point_cloud_buffer.empty());
+    assert(timestamp_buffer.empty());
+
     std::cout << "Done" << std::endl;
     return 0;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
