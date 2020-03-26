@@ -213,14 +213,16 @@ void point_cloud_writer_thread(
         out_file.close();
         auto write_out_pt = std::chrono::high_resolution_clock::now();
 
-        std::cout << "writer thread profile:" << std::endl;
-        std::chrono::duration<double> elapsed;
-        elapsed = pop_queue_pt - start_pt;
-        std::cout << "  pop_queue: " << elapsed.count() << std::endl;
-        elapsed = cache_out_string_pt - pop_queue_pt;
-        std::cout << "  cache_out_string_pt: " << elapsed.count() << std::endl;
-        elapsed = write_out_pt - cache_out_string_pt;
-        std::cout << "  write_out_pt: " << elapsed.count() << std::endl;
+        free(point_cloud);
+
+        //std::cout << "writer thread profile:" << std::endl;
+        //std::chrono::duration<double> elapsed;
+        //elapsed = pop_queue_pt - start_pt;
+        //std::cout << "  pop_queue: " << elapsed.count() << std::endl;
+        //elapsed = cache_out_string_pt - pop_queue_pt;
+        //std::cout << "  cache_out_string_pt: " << elapsed.count() << std::endl;
+        //elapsed = write_out_pt - cache_out_string_pt;
+        //std::cout << "  write_out_pt: " << elapsed.count() << std::endl;
     }
 }
 
