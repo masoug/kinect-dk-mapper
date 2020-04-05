@@ -352,6 +352,10 @@ int main(const int argc, const char* argv[])
         std::cout << "  Captured frame " << i + 1 << std::endl;
     }
     std::cout << "Capture complete" << std::endl << std::endl;
+
+    // Shut down the camera when finished with application logic
+    k4a_device_stop_cameras(device);
+    k4a_device_close(device);
     
     {
         std::lock_guard<std::mutex> lg(cloud_buffer_mutex);
@@ -360,10 +364,6 @@ int main(const int argc, const char* argv[])
     cloud_buffer_cv.notify_one();
     std::cout << "Waiting for writer thread to join..." << std::endl;
     cloud_writer_thread.join();
-
-    // Shut down the camera when finished with application logic
-    k4a_device_stop_cameras(device);
-    k4a_device_close(device);
 
     // free remaining resources
     k4a_image_release(xy_table);
